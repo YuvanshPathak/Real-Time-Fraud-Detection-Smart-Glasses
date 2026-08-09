@@ -4,9 +4,4 @@ python-multipart
 deepface
 opencv-python
 tf-keras
-speechbrain==0.5.16
-torch
-torchaudio
-huggingface_hub==0.19.4
-torchcodec
 soundfile

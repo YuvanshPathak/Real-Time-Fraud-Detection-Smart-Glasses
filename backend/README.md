@@ -16,12 +16,6 @@ backend/
 ├── utils/
 │   └── scoring.py
 │
-├── reference_faces/
-│   └── reference.jpg
-│
-├── reference_audio/
-│   └── reference.wav
-│
 ├── uploads/
 │   └── .gitkeep
 │
@@ -80,7 +74,7 @@ POST /face-check
 ```
 
 - Upload a file with the form field name `image`.
-- The uploaded image is compared to `reference_faces/reference.jpg` using DeepFace.
+- Analyzes the uploaded image itself for liveness/deepfake artifacts — no stored reference is used. Identity matching against a presented ID happens via `/face-to-id-sync`, using the ID document uploaded in that same request.
 
 Example curl:
 
@@ -96,7 +90,7 @@ POST /voice-check
 ```
 
 - Upload a file with the form field name `audio`.
-- The uploaded audio is compared to `reference_audio/reference.wav` using SpeechBrain.
+- Analyzes the uploaded audio itself for spoof/liveness artifacts — no stored reference is used.
 
 Example curl:
 
@@ -130,23 +124,10 @@ curl -X POST "http://127.0.0.1:8000/risk-score" \
 
 ## Notes
 
-- Face verification uses DeepFace with the Facenet model and the OpenCV detector.
-- Voice verification uses SpeechBrain speaker recognition with cosine similarity.
-- Uploaded files are saved in the `uploads/` folder.
+- Face/voice liveness checks analyze only the freshly uploaded capture — no personal reference file or database is stored or compared against.
+- Identity matching (`/face-to-id-sync`) uses DeepFace with the Facenet model, comparing the live capture against the ID document uploaded in that same request.
+- Uploaded files are saved temporarily in the `uploads/` folder and deleted immediately after each request.
 
 ## Risk Fusion
 
-- The API uses weighted fusion: `(face_score * 0.6) + (voice_score * 0.4)`.
-- SAFE if score >= 0.8, SUSPICIOUS if score >= 0.5, otherwise FRAUD.
-
-## DeepFace Setup
-
-1. Place your reference image at `backend/reference_faces/reference.jpg`.
-2. Install dependencies from `requirements.txt`.
-3. Start the server and call `POST /face-check` with an image file.
-
-## SpeechBrain Setup
-
-1. Place your reference audio at `backend/reference_audio/reference.wav`.
-2. Use WAV files (mono is recommended).
-3. Start the server and call `POST /voice-check` with an audio file.
+See [utils/scoring.py](utils/scoring.py) for the current weighted fusion formula and SAFE/SUSPICIOUS/FRAUD thresholds.

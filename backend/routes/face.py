@@ -10,9 +10,6 @@ from fastapi import APIRouter, File, UploadFile, HTTPException
 # Local application imports
 from utils.anti_spoofing import analyze_facial_liveness
 
-# Reference image path
-REFERENCE_IMAGE_PATH = os.path.join("reference_faces", "reference.jpg")
-
 # Create a router for face-related endpoints
 router = APIRouter()
 
@@ -36,34 +33,14 @@ async def face_check(image: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Failed to save uploaded image") from exc
 
     try:
-        # 1. Primary Facial Liveness & Deepfake Analysis
+        # Facial Liveness & Deepfake Analysis (no stored reference — analyzes the live capture itself)
         liveness_res = analyze_facial_liveness(file_path)
-
-        # 2. Optional Biometric Face Matching if reference image is present
-        similarity_distance = None
-        is_same_person = None
-        if os.path.isfile(REFERENCE_IMAGE_PATH):
-            try:
-                from deepface import DeepFace
-                verify_res = DeepFace.verify(
-                    img1_path=file_path,
-                    img2_path=REFERENCE_IMAGE_PATH,
-                    detector_backend="opencv",
-                    model_name="Facenet",
-                    enforce_detection=False,
-                )
-                is_same_person = verify_res.get("verified")
-                similarity_distance = verify_res.get("distance")
-            except Exception:
-                pass
 
         return {
             "module": "facial_deepfake_liveness",
             "face_liveness_score": liveness_res["face_liveness_score"],
             "is_deepfake": liveness_res["is_deepfake"],
             "liveness_status": liveness_res["liveness_status"],
-            "same_person": is_same_person,
-            "distance": similarity_distance,
             "details": liveness_res["details"],
             "status": "success",
         }

@@ -227,23 +227,13 @@ def analyze_document_authenticity(image_path: str) -> dict:
         if os.path.exists(ela_temp_path):
             os.remove(ela_temp_path)
 
-    # 2. ID Document Detection (Face Crop from ID Document)
+    # 2. ID Document Detection (portrait presence check only — nothing is saved to disk)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     face_cascade = cv2.CascadeClassifier(cascade_path)
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
 
     has_id_portrait = len(faces) > 0
-    id_face_cropped_path = None
-
-    if has_id_portrait:
-        # Crop the first detected ID face
-        (x, y, w, h) = faces[0]
-        id_face_crop = img[y : y + h, x : x + w]
-        crop_dir = os.path.join("uploads", "id_crops")
-        os.makedirs(crop_dir, exist_ok=True)
-        id_face_cropped_path = os.path.join(crop_dir, f"crop_{os.path.basename(image_path)}")
-        cv2.imwrite(id_face_cropped_path, id_face_crop)
 
     # 3. Authenticity Score Calculation
     # Un-edited physical ID photos have uniform ELA variance across the card.
@@ -266,7 +256,6 @@ def analyze_document_authenticity(image_path: str) -> dict:
         "is_tampered": is_tampered,
         "document_type": "IDENTITY_CARD" if has_id_portrait else "OFFICIAL_DOCUMENT",
         "has_id_portrait": has_id_portrait,
-        "id_face_cropped_path": id_face_cropped_path,
         "details": {
             "ela_std": round(ela_std, 2),
             "ela_mean": round(ela_mean, 2),
