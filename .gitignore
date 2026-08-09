@@ -21,3 +21,19 @@ Thumbs.db
 
 #global
 /*.txt
+
+# ─── ML Models & Large Binaries ──────────────────────────────────────────────
+# DeepFace / SpeechBrain download model weights at runtime — never commit them.
+backend/pretrained_models/
+backend/.deepface/
+
+# Common ML weight / checkpoint extensions
+*.ckpt
+*.pt
+*.pth
+*.pb
+*.h5
+*.tflite
+*.onnx
+*.bin
+*.safetensors
