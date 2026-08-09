@@ -50,12 +50,11 @@ No hardware or gateway exists yet. The browser tab acts as both the Edge capture
 │  /document-check   Tamper · Error Level Analysis (ELA)         │
 │  /face-to-id-sync  Identity match · DeepFace / Facenet         │
 │                                                                │
-│  /risk-score  →  Weighted Fusion 35 / 35 / 15 / 15            │
+│  /risk-score  →  Weighted Fusion 35 / 35 / 15 / 15             │
 │                  → SAFE · SUSPICIOUS · FRAUD verdict           │
 └────────────────────────────┬───────────────────────────────────┘
                              │  JSON
                              ▼
-                    ┌─────────────────┐
                     │  FRONTEND       │
                     │  Risk Card      │
                     │  Verdict pill + │
