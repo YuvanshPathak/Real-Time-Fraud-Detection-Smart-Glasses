@@ -1,29 +1,72 @@
-"""Utility functions for risk fusion."""
+"""Utility functions for Multi-Modal AI Fraud Fusion & Decision Engine."""
 
 
 def _round_score(value: float) -> float:
     """Round scores to two decimal places for clean output."""
-    return round(value, 2)
+    return round(float(value), 2)
 
 
-def _validate_score(value: float, label: str) -> None:
-    """Validate that a score is within 0..1."""
-    if value < 0 or value > 1:
-        raise ValueError(f"{label} must be between 0 and 1")
+def _validate_score(value: float, label: str) -> float:
+    """Validate and clamp score to range 0..1."""
+    if value is None:
+        return 1.0
+    return max(0.0, min(1.0, float(value)))
 
 
-def fuse_scores(face_score: float, voice_score: float) -> float:
-    """Combine face and voice scores with weighted fusion."""
-    _validate_score(face_score, "face_score")
-    _validate_score(voice_score, "voice_score")
-    fused = (face_score * 0.6) + (voice_score * 0.4)
-    return _round_score(fused)
+def fuse_multi_modal_scores(
+    voice_liveness_score: float = 1.0,
+    face_liveness_score: float = 1.0,
+    face_id_match_score: float = 1.0,
+    doc_authenticity_score: float = 1.0,
+) -> dict:
+    """Combine multi-modal verification signals into a unified Fraud Risk Score.
 
+    Weights:
+    - Voice Anti-Spoofing: 35%
+    - Facial Liveness (Deepfake Check): 35%
+    - Face-to-ID Sync Match: 15%
+    - Document Authenticity (ELA Check): 15%
+    """
+    v_score = _validate_score(voice_liveness_score, "voice_liveness_score")
+    f_score = _validate_score(face_liveness_score, "face_liveness_score")
+    id_score = _validate_score(face_id_match_score, "face_id_match_score")
+    doc_score = _validate_score(doc_authenticity_score, "doc_authenticity_score")
 
-def classify_risk(score: float) -> tuple[str, str]:
-    """Classify risk level and recommendation based on score."""
-    if score >= 0.8:
-        return "SAFE", "Proceed"
-    if score >= 0.5:
-        return "SUSPICIOUS", "Manual verification advised"
-    return "FRAUD", "High fraud probability detected"
+    # Combined liveness index (1.0 = 100% genuine)
+    liveness_index = (
+        (v_score * 0.35)
+        + (f_score * 0.35)
+        + (id_score * 0.15)
+        + (doc_score * 0.15)
+    )
+
+    # Fraud Risk Score (0.0 = safe, 1.0 = definite fraud/spoof)
+    fraud_risk_score = _round_score(1.0 - liveness_index)
+
+    # Risk level classification
+    if fraud_risk_score < 0.25:
+        risk_level = "SAFE"
+        recommendation = "Genuine interaction verified. Safe to proceed."
+        audio_alert_tone = "CONFIRMATION_BEEP"
+    elif fraud_risk_score < 0.65:
+        risk_level = "SUSPICIOUS"
+        recommendation = "Suspicious anomalies detected. Manual identity verification advised."
+        audio_alert_tone = "WARNING_CHIME"
+    else:
+        risk_level = "FRAUD"
+        recommendation = "High AI Fraud / Spoofing probability detected! Alert triggered."
+        audio_alert_tone = "CRITICAL_ALARM"
+
+    return {
+        "fraud_risk_score": fraud_risk_score,
+        "liveness_index": _round_score(liveness_index),
+        "risk_level": risk_level,
+        "recommendation": recommendation,
+        "audio_alert_tone": audio_alert_tone,
+        "modalities": {
+            "voice_liveness": v_score,
+            "face_liveness": f_score,
+            "face_id_match": id_score,
+            "doc_authenticity": doc_score,
+        },
+    }

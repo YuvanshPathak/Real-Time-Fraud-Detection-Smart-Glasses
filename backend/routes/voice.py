@@ -1,4 +1,4 @@
-"""Voice verification routes."""
+"""Voice anti-spoofing and liveness verification routes."""
 
 # Standard library imports
 import os
@@ -24,29 +24,32 @@ pathlib.Path.symlink_to = _safe_symlink_to
 
 # Third-party imports
 from fastapi import APIRouter, File, UploadFile, HTTPException
-import torch
-import torch.nn.functional as torch_nn
-import torchaudio
-import soundfile as sf
 
-# SpeechBrain expects torchaudio.set_audio_backend on some versions
-if not hasattr(torchaudio, "set_audio_backend"):
-    def _noop_backend(_backend):
-        return None
+# Local application imports
+from utils.anti_spoofing import analyze_voice_liveness
 
-    torchaudio.set_audio_backend = _noop_backend
-
-from speechbrain.pretrained import EncoderClassifier
-
-# Reference audio path (place your reference audio here)
+# Reference audio path
 REFERENCE_AUDIO_PATH = os.path.join("reference_audio", "reference.wav")
 
+_SPEAKER_MODEL = None
 
-# Load the pretrained speaker recognition model once at startup
-SPEAKER_MODEL = EncoderClassifier.from_hparams(
-    source="speechbrain/spkrec-ecapa-voxceleb",
-    run_opts={"device": "cpu"},
-)
+
+def _get_speaker_model():
+    global _SPEAKER_MODEL
+    if _SPEAKER_MODEL is None:
+        try:
+            import torchaudio
+            if not hasattr(torchaudio, "set_audio_backend"):
+                torchaudio.set_audio_backend = lambda _b: None
+            from speechbrain.pretrained import EncoderClassifier
+            _SPEAKER_MODEL = EncoderClassifier.from_hparams(
+                source="speechbrain/spkrec-ecapa-voxceleb",
+                run_opts={"device": "cpu"},
+            )
+        except Exception:
+            _SPEAKER_MODEL = False
+    return _SPEAKER_MODEL if _SPEAKER_MODEL is not False else None
+
 
 # Create a router for voice-related endpoints
 router = APIRouter()
@@ -54,7 +57,7 @@ router = APIRouter()
 
 @router.post("/voice-check")
 async def voice_check(audio: UploadFile = File(...)):
-    """Handle voice verification requests."""
+    """Handle voice anti-spoofing and audio liveness verification requests."""
     # Validate file presence
     if not audio.filename:
         raise HTTPException(status_code=400, detail="No audio file provided")
@@ -67,79 +70,69 @@ async def voice_check(audio: UploadFile = File(...)):
     safe_name = f"voice_{uuid4().hex}{file_ext}"
     file_path = os.path.join("uploads", safe_name)
 
-    # Save the uploaded audio to disk
+    # Save uploaded audio to disk
     try:
         with open(file_path, "wb") as buffer:
             buffer.write(await audio.read())
     except OSError as exc:
-        raise HTTPException(status_code=500, detail="Failed to save audio") from exc
+        raise HTTPException(status_code=500, detail="Failed to save audio file") from exc
 
-    # Ensure reference audio exists
-    if not os.path.isfile(REFERENCE_AUDIO_PATH):
-        raise HTTPException(
-            status_code=500,
-            detail="Reference audio not found at reference_audio/reference.wav",
-        )
-
-    # Run SpeechBrain verification and clean up the temp file afterwards
     try:
-        # Load and normalize uploaded audio (soundfile avoids torchcodec)
-        audio_data, sample_rate = sf.read(file_path, dtype="float32")
-        if audio_data.ndim > 1:
-            audio_data = audio_data.mean(axis=1)
-        waveform = torch.from_numpy(audio_data).unsqueeze(0)
+        # 1. Primary AI Voice Anti-Spoofing & Liveness Analysis
+        liveness_res = analyze_voice_liveness(file_path)
 
-        # Load and normalize reference audio
-        ref_data, ref_sample_rate = sf.read(REFERENCE_AUDIO_PATH, dtype="float32")
-        if ref_data.ndim > 1:
-            ref_data = ref_data.mean(axis=1)
-        ref_waveform = torch.from_numpy(ref_data).unsqueeze(0)
+        # 2. Speaker similarity comparison if reference audio exists
+        similarity = None
+        speaker_model = _get_speaker_model()
+        if os.path.isfile(REFERENCE_AUDIO_PATH) and speaker_model is not None:
+            try:
+                import torch
+                import torch.nn.functional as torch_nn
+                import torchaudio
+                import soundfile as sf
 
-        # Resample if needed for both signals
-        target_rate = 16000
-        if sample_rate != target_rate:
-            waveform = torchaudio.functional.resample(
-                waveform, orig_freq=sample_rate, new_freq=target_rate
-            )
-        if ref_sample_rate != target_rate:
-            ref_waveform = torchaudio.functional.resample(
-                ref_waveform, orig_freq=ref_sample_rate, new_freq=target_rate
-            )
+                audio_data, sample_rate = sf.read(file_path, dtype="float32")
+                if audio_data.ndim > 1:
+                    audio_data = audio_data.mean(axis=1)
+                waveform = torch.from_numpy(audio_data).unsqueeze(0)
 
-        # Extract speaker embeddings
-        with torch.no_grad():
-            emb_live = SPEAKER_MODEL.encode_batch(waveform).squeeze()
-            emb_ref = SPEAKER_MODEL.encode_batch(ref_waveform).squeeze()
+                ref_data, ref_sample_rate = sf.read(REFERENCE_AUDIO_PATH, dtype="float32")
+                if ref_data.ndim > 1:
+                    ref_data = ref_data.mean(axis=1)
+                ref_waveform = torch.from_numpy(ref_data).unsqueeze(0)
 
-        # Cosine similarity between embeddings
-        similarity_raw = torch_nn.cosine_similarity(emb_live, emb_ref, dim=0)
-        similarity = float(similarity_raw.item())
+                target_rate = 16000
+                if sample_rate != target_rate:
+                    waveform = torchaudio.functional.resample(
+                        waveform, orig_freq=sample_rate, new_freq=target_rate
+                    )
+                if ref_sample_rate != target_rate:
+                    ref_waveform = torchaudio.functional.resample(
+                        ref_waveform, orig_freq=ref_sample_rate, new_freq=target_rate
+                    )
 
-        # Normalize similarity to 0..1 for cleaner API output
-        similarity = max(0.0, min(1.0, (similarity + 1) / 2))
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or unsupported audio file",
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Voice verification failed",
-        ) from exc
+                with torch.no_grad():
+                    emb_live = speaker_model.encode_batch(waveform).squeeze()
+                    emb_ref = speaker_model.encode_batch(ref_waveform).squeeze()
+
+                sim_raw = torch_nn.cosine_similarity(emb_live, emb_ref, dim=0)
+                sim_val = float(sim_raw.item())
+                similarity = round(max(0.0, min(1.0, (sim_val + 1) / 2)), 2)
+            except Exception:
+                similarity = None
+
+        return {
+            "module": "voice_anti_spoofing",
+            "voice_liveness_score": liveness_res["voice_liveness_score"],
+            "spoof_detected": liveness_res["is_spoof"],
+            "spoof_type": liveness_res["spoof_type"],
+            "voice_similarity": similarity,
+            "details": liveness_res["details"],
+            "status": "success",
+        }
     finally:
         try:
-            os.remove(file_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
         except OSError:
             pass
-
-    # Determine spoof suspicion based on similarity threshold
-    spoof_detected = similarity < 0.75
-
-    # Return the real verification response
-    return {
-        "module": "voice_verification",
-        "voice_similarity": round(similarity, 2),
-        "spoof_detected": spoof_detected,
-        "status": "success",
-    }

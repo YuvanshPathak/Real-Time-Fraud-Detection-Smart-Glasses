@@ -1,35 +1,42 @@
-"""Unified risk scoring routes."""
+"""Unified multi-modal risk scoring routes."""
+
+# Standard library imports
+from typing import Optional
 
 # Third-party imports
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Local application imports
-from utils.scoring import fuse_scores, classify_risk
+from utils.scoring import fuse_multi_modal_scores
 
 # Create a router for risk-related endpoints
 router = APIRouter()
 
 
-class RiskScoreRequest(BaseModel):
-    """Request model for risk score fusion."""
+class MultiModalRiskRequest(BaseModel):
+    """Request model for multi-modal decision fusion."""
 
-    face_score: float
-    voice_score: float
+    voice_liveness_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+    face_liveness_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+    face_id_match_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+    doc_authenticity_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
 
 
 @router.post("/risk-score")
-def risk_score(payload: RiskScoreRequest):
-    """Return a fused fraud risk score based on face and voice inputs."""
+def risk_score(payload: MultiModalRiskRequest):
+    """Return a fused fraud risk score based on multi-modal liveness and authenticity signals."""
     try:
-        score = fuse_scores(payload.face_score, payload.voice_score)
+        fusion_result = fuse_multi_modal_scores(
+            voice_liveness_score=payload.voice_liveness_score,
+            face_liveness_score=payload.face_liveness_score,
+            face_id_match_score=payload.face_id_match_score,
+            doc_authenticity_score=payload.doc_authenticity_score,
+        )
+        return {
+            "module": "decision_fusion_engine",
+            "status": "success",
+            **fusion_result,
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    risk_level, recommendation = classify_risk(score)
-
-    return {
-        "risk_level": risk_level,
-        "risk_score": score,
-        "recommendation": recommendation,
-    }

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Navbar from "./components/Navbar.jsx";
 import LiveFeedCard from "./components/LiveFeedCard.jsx";
 import FaceVerificationCard from "./components/FaceVerificationCard.jsx";
 import VoiceVerificationCard from "./components/VoiceVerificationCard.jsx";
+import DocumentVerificationCard from "./components/DocumentVerificationCard.jsx";
 import RiskAnalysisCard from "./components/RiskAnalysisCard.jsx";
 
 const dataUrlToFile = (dataUrl, filename) => {
@@ -21,11 +22,13 @@ const dataUrlToFile = (dataUrl, filename) => {
 const App = () => {
   const webcamRef = useRef(null);
   const [lastCapture, setLastCapture] = useState(null);
-  const [faceReady, setFaceReady] = useState(false);
-  const [voiceReady, setVoiceReady] = useState(false);
-  const [faceScore, setFaceScore] = useState(null);
-  const [voiceScore, setVoiceScore] = useState(null);
+  const [liveFaceFile, setLiveFaceFile] = useState(null);
 
+  // Score states
+  const [faceLivenessScore, setFaceLivenessScore] = useState(null);
+  const [voiceLivenessScore, setVoiceLivenessScore] = useState(null);
+  const [docAuthenticityScore, setDocAuthenticityScore] = useState(null);
+  const [faceIdMatchScore, setFaceIdMatchScore] = useState(null);
 
   const captureFace = () => {
     const screenshot = webcamRef.current?.getScreenshot();
@@ -35,35 +38,48 @@ const App = () => {
 
     const file = dataUrlToFile(screenshot, `face-${Date.now()}.jpg`);
     setLastCapture(new Date());
+    setLiveFaceFile(file);
     return file;
   };
 
-  return (
-    <div className="relative min-h-screen text-white">
-      <div className="gradient-orb absolute -top-32 right-10 h-64 w-64" />
-      <div className="gradient-orb absolute bottom-12 left-0 h-72 w-72" />
+  const handleDocScores = ({ docAuthenticityScore, faceIdMatchScore }) => {
+    setDocAuthenticityScore(docAuthenticityScore);
+    setFaceIdMatchScore(faceIdMatchScore);
+  };
 
-      <main className="relative mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8">
+  return (
+    <div className="relative min-h-screen text-white bg-slate-950 font-sans selection:bg-cyan-500 selection:text-black">
+      {/* Background Cyber Orbs */}
+      <div className="gradient-orb absolute -top-32 right-10 h-96 w-96 opacity-40 blur-3xl" />
+      <div className="gradient-orb absolute bottom-12 left-0 h-96 w-96 opacity-30 blur-3xl" />
+
+      <main className="relative mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 md:px-8">
         <Navbar />
 
-        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <LiveFeedCard webcamRef={webcamRef} lastCapture={lastCapture} />
-          <div className="flex flex-col gap-6">
+        <section className="grid gap-6 lg:grid-cols-12">
+          {/* Left Column: Live Wearable Stream & HUD Feed */}
+          <div className="lg:col-span-6 flex flex-col gap-6">
+            <LiveFeedCard webcamRef={webcamRef} lastCapture={lastCapture} />
+            <DocumentVerificationCard
+              liveFaceFile={liveFaceFile}
+              onScore={handleDocScores}
+            />
+          </div>
+
+          {/* Right Column: AI Anti-Spoofing Analytics & Decision Fusion */}
+          <div className="lg:col-span-6 flex flex-col gap-6">
             <FaceVerificationCard
               onCapture={captureFace}
-              onComplete={setFaceReady}
-              onScore={setFaceScore}
+              onScore={setFaceLivenessScore}
             />
             <VoiceVerificationCard
-              onComplete={setVoiceReady}
-              onScore={setVoiceScore}
+              onScore={setVoiceLivenessScore}
             />
             <RiskAnalysisCard
-              canAnalyze={faceReady && voiceReady}
-              faceReady={faceReady}
-              voiceReady={voiceReady}
-              faceScore={faceScore}
-              voiceScore={voiceScore}
+              faceLivenessScore={faceLivenessScore}
+              voiceLivenessScore={voiceLivenessScore}
+              docAuthenticityScore={docAuthenticityScore}
+              faceIdMatchScore={faceIdMatchScore}
             />
           </div>
         </section>

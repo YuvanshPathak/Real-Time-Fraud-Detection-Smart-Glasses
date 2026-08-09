@@ -4,11 +4,12 @@ import StatusPill from "./StatusPill.jsx";
 import { uploadVoice } from "../services/api.js";
 
 const statusStyles = {
-  genuine: "bg-emerald-500/20 text-emerald-200",
-  spoofed: "bg-rose-500/20 text-rose-200",
+  GENUINE_HUMAN_VOICE: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  AI_SYNTHETIC_VOICE_CLONE: "bg-rose-500/20 text-rose-300 border-rose-500/40",
+  REPLAY_ATTACK: "bg-amber-500/20 text-amber-300 border-amber-500/40",
 };
 
-const RECORD_SECONDS = 10;
+const RECORD_SECONDS = 5;
 
 const encodeWav = (samples, sampleRate) => {
   const numChannels = 1;
@@ -95,7 +96,7 @@ const VoiceVerificationCard = ({ onComplete, onScore }) => {
 
         try {
           if (!chunksRef.current.length) {
-            setError("No audio captured. Please try again.");
+            setError("No audio captured from microphone.");
             return;
           }
 
@@ -121,7 +122,7 @@ const VoiceVerificationCard = ({ onComplete, onScore }) => {
           });
           setAudioFile(file);
         } catch (err) {
-          setError("Could not process the recorded audio.");
+          setError("Could not process audio stream.");
         } finally {
           setRecording(false);
           setTimeLeft(RECORD_SECONDS);
@@ -133,13 +134,13 @@ const VoiceVerificationCard = ({ onComplete, onScore }) => {
       setTimeLeft(RECORD_SECONDS);
       mediaRecorder.start(250);
     } catch (err) {
-      setError("Microphone permission denied or unavailable.");
+      setError("Microphone access denied or unavailable.");
     }
   };
 
   const analyzeVoice = async () => {
     if (!audioFile) {
-      setError("Record a voice sample first.");
+      setError("Record an audio stream first.");
       return;
     }
 
@@ -149,12 +150,12 @@ const VoiceVerificationCard = ({ onComplete, onScore }) => {
     try {
       const data = await uploadVoice(audioFile);
       setResult(data);
-      if (typeof data.voice_similarity === "number") {
-        onScore?.(data.voice_similarity);
+      if (typeof data.voice_liveness_score === "number") {
+        onScore?.(data.voice_liveness_score);
       }
       onComplete?.(true);
     } catch (err) {
-      setError("Voice analysis failed. Please try again.");
+      setError("Voice anti-spoofing scan failed.");
       onComplete?.(false);
     } finally {
       setLoading(false);
@@ -162,76 +163,79 @@ const VoiceVerificationCard = ({ onComplete, onScore }) => {
   };
 
   return (
-    <section className="glass-panel rounded-3xl p-5">
-      <div className="flex items-center justify-between">
+    <section className="glass-panel rounded-3xl p-5 border border-purple-500/20 bg-slate-900/60 backdrop-blur-md shadow-lg">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-400">
-            Voice Verification
+          <p className="text-xs font-mono uppercase tracking-[0.35em] text-purple-400">
+            Acoustic Anti-Spoofing
           </p>
-          <h3 className="text-lg font-display font-semibold">
-            Authenticity Scan
+          <h3 className="text-lg font-display font-semibold text-white">
+            AI Voice Clone & Replay Detection
           </h3>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={startRecording}
-            disabled={recording}
-            className="rounded-full border border-cyan-400/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-cyan-100 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {recording ? `Recording ${timeLeft}s` : "Record Voice"}
-          </button>
-          <button
-            onClick={analyzeVoice}
-            disabled={loading || recording || !audioFile}
-            className="rounded-full bg-cyan-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-cyan-100 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Analyzing..." : "Analyze Voice"}
-          </button>
         </div>
         {result && (
           <StatusPill
-            label={result.spoof_detected ? "Spoofed" : "Genuine"}
-            className={
-              result.spoof_detected ? statusStyles.spoofed : statusStyles.genuine
-            }
+            label={result.spoof_type?.replace(/_/g, " ")}
+            className={statusStyles[result.spoof_type] || "bg-purple-500/20 text-purple-200"}
           />
         )}
       </div>
 
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          onClick={startRecording}
+          disabled={recording}
+          className="rounded-full border border-purple-400/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-purple-100 transition hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {recording ? `Listening ${timeLeft}s` : "Record Mic Sample"}
+        </button>
+        <button
+          onClick={analyzeVoice}
+          disabled={loading || recording || !audioFile}
+          className="rounded-full bg-purple-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-purple-100 transition hover:bg-purple-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading ? "Analyzing Spectrum..." : "Analyze Audio Liveness"}
+        </button>
+      </div>
+
       <div className="mt-5 space-y-3">
         <MetricRow
-          label="Voice Authenticity Score"
+          label="Audio Liveness Score"
           value={
             result
-              ? `${(result.voice_similarity * 100).toFixed(1)}%`
+              ? `${(result.voice_liveness_score * 100).toFixed(1)}%`
               : loading
-              ? "Analyzing..."
+              ? "Calculating HF Ratio..."
               : audioFile
-              ? "Captured"
-              : "Awaiting"
+              ? "Audio Captured"
+              : "Awaiting Input"
           }
           emphasize
           loading={loading}
         />
         <MetricRow
-          label="Spoof Detection"
+          label="Voice Classification"
           value={
             result
               ? result.spoof_detected
-                ? "Spoof Detected"
-                : "Clean Signal"
+                ? `SPOOF DETECTED (${result.spoof_type})`
+                : "GENUINE HUMAN VOICE"
               : loading
-              ? "Scanning"
-              : audioFile
-              ? "Ready"
+              ? "Scanning F0 Jitter"
               : "--"
           }
           loading={loading}
         />
+        {result?.details && (
+          <div className="rounded-xl bg-slate-950/60 p-3 text-xs font-mono text-slate-400 grid grid-cols-2 gap-2 border border-slate-800">
+            <div>HF Ratio: <span className="text-purple-300">{result.details.high_frequency_ratio}</span></div>
+            <div>Centroid Std: <span className="text-purple-300">{result.details.spectral_centroid_std}</span></div>
+          </div>
+        )}
       </div>
 
       {error && (
-        <p className="mt-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+        <p className="mt-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
           {error}
         </p>
       )}
