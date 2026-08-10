@@ -37,3 +37,5 @@ backend/.deepface/
 *.onnx
 *.bin
 *.safetensors
+
+/CLAUDE.md

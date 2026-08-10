@@ -23,6 +23,12 @@ The fused **Fraud Risk Score** (0.0 – 1.0) is classified into three levels:
 
 ---
 
+## 🔒 Design Principle: Always Fresh, Never Stored
+
+Every identity check compares the live capture against **the credential presented in that specific interaction** — e.g. the ID document uploaded in the same `/face-to-id-sync` request — and never against a pre-stored personal reference. There is no database, cache, or persisted biometric template anywhere in this codebase; every uploaded file is deleted immediately after the request that used it. This matters because the product exists to verify *arbitrary strangers* against whatever they present in the moment (a bank teller checking a walk-in customer, an officer checking a traveler) — a pre-enrolled "known faces" list would turn this into a different product (access control), not a fraud detector.
+
+---
+
 ## 🏗️ Architecture
 
 This project has two distinct pipelines — one for the **current prototype** and one for the **end-product** target.
@@ -71,9 +77,9 @@ No hardware or gateway exists yet. The browser tab acts as both the Edge capture
 ┌─────────────────┐   BLE/Wi-Fi   ┌─────────────────┐   Wi-Fi   ┌──────────────────────────────────────────────┐
 │  ESP32-S3 SENSE │ ─────────────▶│  EDGE           │ ─────────▶│  GATEWAY                                     │
 │  Camera + Mic   │               │  TinyML         │           │  Phone — Secure Relay                        │
-│  Capture        │               │  Extraction     │           │  (today: browser tab stands in for this hop) │
-│  [partial]      │               │  on-device      │           │  [partial]                                   │
-│                 │               │  feature vectors│           │                                              │
+│  Capture        │               │  Extraction     │           │  (today: browser tab bypasses this hop        │
+│  [partial —     │               │  on-device      │           │   entirely, calling Cloud directly)          │
+│   mic only]     │               │  feature vectors│           │  [not built]                                 │
 │                 │               │  [not built]    │           │                                              │
 └─────────────────┘               └─────────────────┘           └──────────────────┬───────────────────────────┘
                                                                                    │  HTTP
@@ -102,17 +108,27 @@ No hardware or gateway exists yet. The browser tab acts as both the Edge capture
 | Status | Meaning |
 |---|---|
 | ✅ Built & tested | Cloud Verification Engine (`/face-check`, `/voice-check`, `/document-check`, `/face-to-id-sync`, `/risk-score`) · Frontend Risk Card |
-| 🟡 Partially built | ESP32-S3 mic driver · Phone/Gateway (browser stand-in) · Analytics (live cards, no persistence) |
-| ⬜ Not yet built | TinyML on-device feature extraction · Bone Conduction Alert feedback |
+| 🟡 Partially built | ESP32-S3 mic driver (rest of firmware unwritten) · Analytics (live cards only, nothing persisted) |
+| ⬜ Not yet built | TinyML on-device feature extraction · Phone Gateway relay · Bone Conduction Alert feedback |
 
 ---
+
+## ⚠️ Known Limitations
+
+Honest gaps identified against the current code, not the proposal — worth reading before treating any verdict as ground truth:
+
+- **Detection logic is heuristic, not learned.** `/face-check`, `/voice-check`, and `/document-check` classify liveness/spoofing/tampering using hand-tuned signal-processing thresholds (FFT ratios, Laplacian blur bands, ELA std-dev cutoffs) rather than models trained on labeled spoof/genuine data. No EER/FAR/FRR evaluation exists yet. Only the identity-*matching* piece (`/face-to-id-sync`, via DeepFace/Facenet) is a validated trained model.
+- **Low-weighted modalities can be diluted to SAFE.** `face_id_match` and `doc_authenticity` are each only 15% of the fused score. A document the system itself flags `is_tampered: true`, or a face match it flags `verified: false`, can still land as an overall **SAFE** verdict if the other two modalities score well — e.g. a forged-but-genuine-person interaction computes to `0.20` (SAFE), and someone presenting a real ID that isn't theirs computes to `0.22` (SAFE).
+- **Missing modalities default to fully trusted.** `/risk-score` defaults any omitted score field to `1.0` rather than "unknown." A single obvious spoof detected in isolation (e.g. a phone-only cloned-voice call, with face/document unchecked) is diluted from what should be FRAUD down to SUSPICIOUS.
+- **No confidence margin at the thresholds.** `0.249` and `0.251` produce entirely different verdicts (SAFE vs. SUSPICIOUS) with no borderline/manual-review tier.
+- **`/face-check` has no face-detection gate.** It runs its liveness heuristics on whatever image content it receives, even if no face is present in the frame.
 
 ## 📁 Repository Structure
 
 ```
 Real-Time-Fraud-Detection-Smart-Glasses/
 │
-├── backend/                        # FastAPI Cloud AI Engine
+├── backend/                        # FastAPI Cloud AI Engine — built & tested
 │   ├── app.py                      # Application entry point & router registration
 │   ├── routes/
 │   │   ├── face.py                 # /face-check & /face-to-id-sync endpoints
@@ -121,25 +137,28 @@ Real-Time-Fraud-Detection-Smart-Glasses/
 │   │   └── risk.py                 # /risk-score fusion endpoint
 │   ├── utils/
 │   │   ├── scoring.py              # Multi-modal fusion formula & thresholds
-│   │   └── anti_spoofing.py        # Liveness / deepfake detection helpers
+│   │   └── anti_spoofing.py        # Liveness / deepfake / tamper detection heuristics
+│   ├── test_api.py                 # End-to-end route smoke test
 │   ├── requirements.txt
-│   └── README.md
+│   └── uploads/                    # Ephemeral only — files deleted after each request
 │
-├── firmware/                       # ESP32-S3 Arduino Firmware
+├── firmware/                       # ESP32-S3 Arduino Firmware — mostly unwritten
 │   └── smartglasses/
-│       ├── smart_glasses.ino       # Main Arduino sketch
-│       ├── camera.cpp / .h         # OV2640 camera capture
-│       ├── microphone.cpp / .h     # PDM microphone recording (16 kHz, 5 s)
-│       ├── wifi.cpp / .h           # Wi-Fi connection & HTTP client
-│       ├── api.cpp / .h            # Backend API request helpers
-│       ├── storage.cpp             # Local file / buffer management
-│       └── config.h                # Pin assignments & sampling constants
+│       ├── smart_glasses.ino       # Main Arduino sketch — EMPTY, not yet written
+│       ├── microphone.cpp / .h     # PDM microphone recording (16 kHz, 5 s) — implemented
+│       ├── config.h                # Pin assignments & sampling constants — implemented
+│       ├── camera.cpp / .h         # OV2640 camera capture — EMPTY (stub only)
+│       ├── wifi.cpp / .h           # Wi-Fi connection & HTTP client — EMPTY (stub only)
+│       ├── api.cpp / .h            # Backend API request helpers — EMPTY (stub only)
+│       └── storage.cpp             # Local file / buffer management — EMPTY (stub only)
 │
-├── frontend/                       # React Dashboard (Vite + Tailwind CSS)
+├── frontend/                       # React Dashboard (Vite + Tailwind CSS) — built & tested
 │   ├── src/                        # React components & pages
-│   ├── public/
-│   ├── package.json
-│   └── README.md
+│   └── public/
+│
+├── hardware/                       # Reserved for physical build docs / CAD — currently empty
+│
+├── Capstone Report (Idea Defence) Final.pdf   # Original project proposal
 │
 └── README.md                       # ← You are here
 ```
@@ -148,7 +167,7 @@ Real-Time-Fraud-Detection-Smart-Glasses/
 
 ## 🚀 Quick Start
 
-> **Note:** Running the prototype only requires the **Backend** and **Frontend**. The firmware section applies to the end-product hardware target.
+> **Note:** Running the prototype only requires the **Backend** and **Frontend**. The firmware section below applies to the end-product hardware target and is not yet runnable.
 
 ### Prerequisites
 
@@ -156,8 +175,7 @@ Real-Time-Fraud-Detection-Smart-Glasses/
 |---|---|
 | Python | ≥ 3.10 |
 | Node.js | ≥ 18 |
-| Arduino IDE / arduino-cli | ≥ 2.x |
-| ESP32 board package | `esp32` by Espressif ≥ 3.x |
+| Arduino IDE / arduino-cli | ≥ 2.x _(firmware only, not yet usable — see below)_ |
 
 ---
 
@@ -181,8 +199,14 @@ pip install -r requirements.txt
 uvicorn app:app --reload
 ```
 
-API available at **`http://127.0.0.1:8000`**  
+API available at **`http://127.0.0.1:8000`**
 Interactive docs at **`http://127.0.0.1:8000/docs`**
+
+Run the smoke test suite with the server stopped (it spins up its own `TestClient`):
+
+```bash
+python test_api.py
+```
 
 ---
 
@@ -201,15 +225,11 @@ Dashboard available at **`http://127.0.0.1:5173`**
 
 ---
 
-### 3 — Firmware (ESP32-S3 Smart Glasses) 🟡 _Partially built_
+### 3 — Firmware (ESP32-S3 Smart Glasses) ⬜ _Not yet runnable_
 
-> **Status:** The PDM microphone driver is implemented. Camera capture, Wi-Fi HTTP upload, and the main sketch loop are stubbed but not yet complete. TinyML on-device feature extraction is not yet built.
+> **Status:** Only the PDM microphone driver (`microphone.cpp/.h`) and pin/sampling constants (`config.h`) are implemented. The main sketch (`smart_glasses.ino`) is empty, and `camera.cpp`, `wifi.cpp`, `api.cpp`, and `storage.cpp` are all empty stub files. There is nothing to compile or upload yet — this section is a placeholder for when that firmware is written.
 
-1. Open `firmware/smartglasses/smart_glasses.ino` in **Arduino IDE 2**.
-2. Install the **esp32** board package via Board Manager.
-3. Edit `config.h` to set your Wi-Fi credentials and backend URL (GPIO 41 = MIC_DATA, GPIO 42 = MIC_CLK, 16 kHz / 5 s recording).
-4. Select your **ESP32-S3** board and COM port.
-5. **Upload** the sketch.
+Once the sketch and stubs are filled in: open `firmware/smartglasses/smart_glasses.ino` in Arduino IDE 2, install the **esp32** board package, set Wi-Fi credentials and the backend URL, select the ESP32-S3 board/port, and upload. `config.h` currently defines `MIC_DATA_PIN` (GPIO 41), `MIC_CLK_PIN` (GPIO 42), a 16 kHz sample rate, and a 5-second recording window.
 
 ---
 
@@ -241,8 +261,8 @@ Response:
 
 ```json
 {
-  "fraud_risk_score": 0.08,
-  "liveness_index": 0.92,
+  "fraud_risk_score": 0.11,
+  "liveness_index": 0.89,
   "risk_level": "SAFE",
   "recommendation": "Genuine interaction verified. Safe to proceed.",
   "audio_alert_tone": "CONFIRMATION_BEEP",
@@ -265,7 +285,7 @@ Response:
 | **Firmware** | Arduino C++ |
 | **Backend** | Python · FastAPI · DeepFace · OpenCV · TF-Keras · SoundFile |
 | **Frontend** | React 19 · Vite · Tailwind CSS · Axios · react-webcam |
-| **AI Models** | Facenet (face matching) · Custom anti-spoofing heuristics |
+| **AI Models** | Facenet (face matching, trained) · Custom anti-spoofing heuristics (untrained — see Known Limitations) |
 
 ---
 
