@@ -13,6 +13,17 @@ import scipy.signal
 import soundfile as sf
 from PIL import Image, ImageChops, ImageEnhance
 
+_FACE_CASCADE = None
+
+
+def _get_face_cascade() -> cv2.CascadeClassifier:
+    """Lazily load the shared Haar cascade used for face-presence gating."""
+    global _FACE_CASCADE
+    if _FACE_CASCADE is None:
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        _FACE_CASCADE = cv2.CascadeClassifier(cascade_path)
+    return _FACE_CASCADE
+
 
 def analyze_voice_liveness(audio_path: str) -> dict:
     """Analyze audio file for AI voice cloning, TTS synthesis, and replay attack indicators.
@@ -113,7 +124,31 @@ def analyze_facial_liveness(image_path: str) -> dict:
             "details": {"error": "Could not read image file"},
         }
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # 0. Face-presence gate — without this, the heuristics below happily score
+    # blank walls or empty frames. No face means the interaction can't be
+    # verified, so this fails closed rather than defaulting to "genuine".
+    full_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = _get_face_cascade().detectMultiScale(full_gray, scaleFactor=1.1, minNeighbors=4)
+
+    if len(faces) == 0:
+        return {
+            "face_liveness_score": 0.05,
+            "is_deepfake": True,
+            "liveness_status": "NO_FACE_DETECTED",
+            "details": {"faces_found": 0, "multiple_faces_detected": False},
+        }
+
+    # If more than one face is in frame, analyze the largest — the subject
+    # closest to camera — rather than an arbitrary detection-order index.
+    multiple_faces_detected = len(faces) > 1
+    fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+
+    # Pad the crop so liveness cues near the face edge (hairline, jaw) aren't clipped.
+    pad_x, pad_y = int(fw * 0.15), int(fh * 0.15)
+    x0, y0 = max(0, fx - pad_x), max(0, fy - pad_y)
+    x1, y1 = min(img.shape[1], fx + fw + pad_x), min(img.shape[0], fy + fh + pad_y)
+    img = img[y0:y1, x0:x1]
+    gray = full_gray[y0:y1, x0:x1]
 
     # 1. Laplacian Variance (Blur & Focus check for Screen Replay / Print Attack)
     laplacian_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
@@ -184,6 +219,8 @@ def analyze_facial_liveness(image_path: str) -> dict:
             "laplacian_variance": round(laplacian_var, 2),
             "fft_frequency_ratio": round(freq_ratio, 3),
             "chroma_variance": round(chroma_var, 2),
+            "faces_found": len(faces),
+            "multiple_faces_detected": multiple_faces_detected,
         },
     }
 
@@ -229,11 +266,10 @@ def analyze_document_authenticity(image_path: str) -> dict:
 
     # 2. ID Document Detection (portrait presence check only — nothing is saved to disk)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    face_cascade = cv2.CascadeClassifier(cascade_path)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
+    faces = _get_face_cascade().detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
 
     has_id_portrait = len(faces) > 0
+    multiple_faces_detected = len(faces) > 1
 
     # 3. Authenticity Score Calculation
     # Un-edited physical ID photos have uniform ELA variance across the card.
@@ -260,5 +296,6 @@ def analyze_document_authenticity(image_path: str) -> dict:
             "ela_std": round(ela_std, 2),
             "ela_mean": round(ela_mean, 2),
             "faces_found": len(faces),
+            "multiple_faces_detected": multiple_faces_detected,
         },
     }

@@ -9,6 +9,9 @@ const statusStyles = {
   FRAUD: "bg-rose-500/20 text-rose-300 border-rose-500/40",
 };
 
+const formatModalityScore = (value) =>
+  value === null || value === undefined ? "Not checked" : `${(value * 100).toFixed(0)}%`;
+
 const playBoneConductionAlert = (toneType) => {
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -54,8 +57,19 @@ const RiskAnalysisCard = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [fusedInputs, setFusedInputs] = useState(null);
 
   const canCalculate = faceLivenessScore !== null || voiceLivenessScore !== null;
+
+  // True once any modality score changes after a fusion was already computed —
+  // the displayed verdict no longer reflects everything that's now been checked.
+  const isStale =
+    result !== null &&
+    fusedInputs !== null &&
+    (fusedInputs.faceLivenessScore !== faceLivenessScore ||
+      fusedInputs.voiceLivenessScore !== voiceLivenessScore ||
+      fusedInputs.docAuthenticityScore !== docAuthenticityScore ||
+      fusedInputs.faceIdMatchScore !== faceIdMatchScore);
 
   const handleAnalyze = async () => {
     if (!canCalculate) {
@@ -67,15 +81,23 @@ const RiskAnalysisCard = ({
     setLoading(true);
 
     try {
+      // Only send scores for checks that actually ran — an omitted field tells
+      // the backend "not evaluated," which is not the same as "genuine."
       const payload = {
-        face_liveness_score: faceLivenessScore ?? 1.0,
-        voice_liveness_score: voiceLivenessScore ?? 1.0,
-        doc_authenticity_score: docAuthenticityScore ?? 1.0,
-        face_id_match_score: faceIdMatchScore ?? 1.0,
+        ...(faceLivenessScore !== null && { face_liveness_score: faceLivenessScore }),
+        ...(voiceLivenessScore !== null && { voice_liveness_score: voiceLivenessScore }),
+        ...(docAuthenticityScore !== null && { doc_authenticity_score: docAuthenticityScore }),
+        ...(faceIdMatchScore !== null && { face_id_match_score: faceIdMatchScore }),
       };
 
       const data = await fetchRiskScore(payload);
       setResult(data);
+      setFusedInputs({
+        faceLivenessScore,
+        voiceLivenessScore,
+        docAuthenticityScore,
+        faceIdMatchScore,
+      });
 
       // Trigger discreet bone conduction feedback audio playback
       playBoneConductionAlert(data.audio_alert_tone || data.risk_level);
@@ -100,9 +122,13 @@ const RiskAnalysisCard = ({
         <button
           onClick={handleAnalyze}
           disabled={!canCalculate || loading}
-          className="rounded-full bg-gradient-to-r from-cyan-500/30 to-blue-500/30 border border-cyan-400/50 px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-cyan-100 transition hover:from-cyan-500/50 hover:to-blue-500/50 disabled:cursor-not-allowed disabled:opacity-50 shadow-lg"
+          className={`rounded-full border px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition disabled:cursor-not-allowed disabled:opacity-50 shadow-lg ${
+            isStale
+              ? "bg-gradient-to-r from-amber-500/30 to-orange-500/30 border-amber-400/50 text-amber-100 hover:from-amber-500/50 hover:to-orange-500/50"
+              : "bg-gradient-to-r from-cyan-500/30 to-blue-500/30 border-cyan-400/50 text-cyan-100 hover:from-cyan-500/50 hover:to-blue-500/50"
+          }`}
         >
-          {loading ? "Fusing Signals..." : "Fuse Decision"}
+          {loading ? "Fusing Signals..." : isStale ? "Re-Fuse Decision" : "Fuse Decision"}
         </button>
         {result && (
           <StatusPill
@@ -111,6 +137,12 @@ const RiskAnalysisCard = ({
           />
         )}
       </div>
+
+      {isStale && (
+        <p className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          A scan result changed after this verdict was fused — the numbers below no longer reflect everything that's been checked. Re-Fuse to update.
+        </p>
+      )}
 
       <div className="mt-5 space-y-3">
         <MetricRow
@@ -155,10 +187,10 @@ const RiskAnalysisCard = ({
         <div className="mt-4 rounded-xl bg-slate-950/70 p-3 text-xs font-mono text-slate-300 border border-slate-800 space-y-1">
           <div className="text-slate-400 uppercase text-[10px] tracking-wider mb-1">Modality Confidence Scores:</div>
           <div className="grid grid-cols-2 gap-2">
-            <div>Voice Liveness: <span className="text-purple-300">{(result.modalities.voice_liveness * 100).toFixed(0)}%</span></div>
-            <div>Face Liveness: <span className="text-cyan-300">{(result.modalities.face_liveness * 100).toFixed(0)}%</span></div>
-            <div>Face-ID Sync: <span className="text-indigo-300">{(result.modalities.face_id_match * 100).toFixed(0)}%</span></div>
-            <div>Doc Authenticity: <span className="text-emerald-300">{(result.modalities.doc_authenticity * 100).toFixed(0)}%</span></div>
+            <div>Voice Liveness: <span className="text-purple-300">{formatModalityScore(result.modalities.voice_liveness)}</span></div>
+            <div>Face Liveness: <span className="text-cyan-300">{formatModalityScore(result.modalities.face_liveness)}</span></div>
+            <div>Face-ID Sync: <span className="text-indigo-300">{formatModalityScore(result.modalities.face_id_match)}</span></div>
+            <div>Doc Authenticity: <span className="text-emerald-300">{formatModalityScore(result.modalities.doc_authenticity)}</span></div>
           </div>
         </div>
       )}

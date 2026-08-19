@@ -15,12 +15,16 @@ router = APIRouter()
 
 
 class MultiModalRiskRequest(BaseModel):
-    """Request model for multi-modal decision fusion."""
+    """Request model for multi-modal decision fusion.
 
-    voice_liveness_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
-    face_liveness_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
-    face_id_match_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
-    doc_authenticity_score: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+    A field left unset means that modality was not evaluated for this
+    interaction — it is excluded from fusion, not assumed genuine.
+    """
+
+    voice_liveness_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    face_liveness_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    face_id_match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    doc_authenticity_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 @router.post("/risk-score")

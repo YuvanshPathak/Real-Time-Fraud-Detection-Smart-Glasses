@@ -7,15 +7,15 @@ const LiveFeedCard = ({ webcamRef, lastCapture }) => {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-xs font-mono uppercase tracking-[0.35em] text-cyan-400">
-              ESP32-S3 Sense Edge Stream
+              Browser Webcam Capture
             </p>
             <h2 className="text-xl font-display font-semibold text-white">
-              Smart Glasses HUD Vision Feed
+              Smart Glasses Vision Feed (Simulated)
             </h2>
           </div>
-          <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(52,211,153,0.3)]">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            ESP32 STREAMING (TINYLML ON-DEVICE)
+          <div className="flex items-center gap-2 text-xs font-mono text-amber-300 bg-amber-950/40 border border-amber-500/30 px-3 py-1 rounded-full">
+            <span className="h-2 w-2 rounded-full bg-amber-400" />
+            SIMULATED — NO ESP32 HARDWARE
           </div>
         </div>
 
@@ -28,32 +28,23 @@ const LiveFeedCard = ({ webcamRef, lastCapture }) => {
             videoConstraints={{ facingMode: "user" }}
           />
 
-          {/* Futuristic Smart Glasses HUD Overlay */}
+          {/* Capture framing guide -- purely decorative, does not track a detected face */}
           <div className="absolute inset-0 pointer-events-none border border-cyan-500/20 rounded-2xl flex items-center justify-center">
-            {/* Target Reticle / Face Box */}
-            <div className="w-48 h-48 border-2 border-dashed border-cyan-400/60 rounded-xl relative flex items-center justify-center animate-pulse">
-              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-300" />
-              <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-cyan-300" />
-              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-cyan-300" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-cyan-300" />
-              <span className="text-[10px] font-mono text-cyan-300 bg-black/60 px-2 py-0.5 rounded border border-cyan-500/40 uppercase tracking-widest">
-                Target Lock
+            <div className="w-48 h-48 border-2 border-dashed border-cyan-400/40 rounded-xl relative flex items-center justify-center">
+              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-300/60" />
+              <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-cyan-300/60" />
+              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-cyan-300/60" />
+              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-cyan-300/60" />
+              <span className="text-[10px] font-mono text-cyan-300/80 bg-black/60 px-2 py-0.5 rounded border border-cyan-500/40 uppercase tracking-widest">
+                Frame Guide
               </span>
-            </div>
-
-            {/* Corner HUD Telemetry */}
-            <div className="absolute top-3 left-3 text-[10px] font-mono text-cyan-400/80 bg-slate-950/80 px-2.5 py-1 rounded border border-cyan-500/30">
-              OV2640 VGA | 30 FPS | TinyML Active
-            </div>
-            <div className="absolute bottom-3 right-3 text-[10px] font-mono text-cyan-400/80 bg-slate-950/80 px-2.5 py-1 rounded border border-cyan-500/30">
-              BLE Relay: CONNECTED
             </div>
           </div>
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between text-xs font-mono text-slate-400 gap-2 border-t border-slate-800 pt-3">
-        <span>Hardware: ESP32-S3 Sense (240MHz Dual Core)</span>
+        <span>Capture: browser webcam, standing in for Edge + Gateway</span>
         <span>
           {lastCapture
             ? `Last Captured Frame: ${lastCapture.toLocaleTimeString()}`
