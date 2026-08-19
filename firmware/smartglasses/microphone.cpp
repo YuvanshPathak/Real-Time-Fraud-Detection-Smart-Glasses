@@ -163,3 +163,74 @@ void recordMicrophone() {
     // Safely free allocated audio memory
     free(audio_buffer);
 }
+
+/**
+ * @brief Record audio into a caller-owned heap buffer for upstream use (e.g. HTTP upload).
+ *
+ * Allocates memory (PSRAM preferred), fills it from the I2S PDM RX channel, and
+ * returns a pointer + sample count to the caller. The caller MUST free(*out_buf).
+ *
+ * @param out_buf     Output: pointer to the allocated int16_t audio buffer.
+ * @param out_samples Output: count of valid 16-bit samples recorded.
+ * @return true if recording succeeded and buffer contains audio data.
+ */
+bool recordToBuffer(int16_t **out_buf, size_t *out_samples) {
+    if (!out_buf || !out_samples) return false;
+    *out_buf     = NULL;
+    *out_samples = 0;
+
+    if (!is_initialized) {
+        Serial.println("[MIC] Auto-initializing for recordToBuffer...");
+        if (!initMicrophone()) {
+            Serial.println("[MIC] recordToBuffer: init failed.");
+            return false;
+        }
+    }
+
+    size_t total_samples     = (size_t)SAMPLE_RATE * (size_t)RECORD_SECONDS;
+    size_t buffer_size_bytes = total_samples * sizeof(int16_t);
+
+    int16_t *buf = NULL;
+    if (psramFound()) {
+        buf = (int16_t *)heap_caps_malloc(buffer_size_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    if (!buf) {
+        buf = (int16_t *)malloc(buffer_size_bytes);
+    }
+    if (!buf) {
+        Serial.printf("[MIC] recordToBuffer: malloc %u bytes failed.\n",
+                      (unsigned int)buffer_size_bytes);
+        return false;
+    }
+
+    Serial.printf("[MIC] Recording %d s into buffer (%u bytes)...\n",
+                  RECORD_SECONDS, (unsigned int)buffer_size_bytes);
+
+    size_t total_read = 0;
+    uint8_t *byte_ptr = (uint8_t *)buf;
+    while (total_read < buffer_size_bytes) {
+        size_t bytes_read = 0;
+        esp_err_t err = i2s_channel_read(rx_handle,
+                                          byte_ptr + total_read,
+                                          buffer_size_bytes - total_read,
+                                          &bytes_read,
+                                          pdMS_TO_TICKS(1000));
+        if (err != ESP_OK || bytes_read == 0) {
+            Serial.printf("[MIC] recordToBuffer: read error 0x%x\n", err);
+            break;
+        }
+        total_read += bytes_read;
+    }
+
+    size_t samples_captured = total_read / sizeof(int16_t);
+    if (samples_captured == 0) {
+        Serial.println("[MIC] recordToBuffer: 0 samples captured.");
+        free(buf);
+        return false;
+    }
+
+    Serial.printf("[MIC] Captured %u samples.\n", (unsigned int)samples_captured);
+    *out_buf     = buf;
+    *out_samples = samples_captured;
+    return true;
+}
