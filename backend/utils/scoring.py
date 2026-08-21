@@ -82,6 +82,7 @@ def fuse_multi_modal_scores(
     face_liveness_score: Optional[float] = None,
     face_id_match_score: Optional[float] = None,
     doc_authenticity_score: Optional[float] = None,
+    tinyml_liveness_score: Optional[float] = None,
 ) -> dict:
     """Combine multi-modal verification signals into a unified Fraud Risk Score.
 
@@ -97,6 +98,14 @@ def fuse_multi_modal_scores(
     the resulting weighted average, any modality that individually crosses its
     own failure threshold puts a floor under the final verdict — see
     ``_escalation_floor``.
+
+    ``tinyml_liveness_score`` (the ESP32-S3's on-device TinyML inference —
+    see firmware/src/tinyml_model.cpp) is deliberately kept OUT of the four
+    weights above and out of the escalation floor: it's a synthetic-data
+    proof-of-concept model (see ml/README.md), not yet validated the way the
+    other four modalities are. When provided, it's clamped/rounded and
+    returned under ``informational`` for logging/display only — it never
+    changes ``fraud_risk_score``/``risk_level``/``escalated``/``borderline``.
     """
     raw_scores = {
         "voice_liveness": voice_liveness_score,
@@ -131,6 +140,10 @@ def fuse_multi_modal_scores(
 
     recommendation, audio_alert_tone = _recommendation_for(risk_level, escalated, borderline)
 
+    informational: Dict[str, float] = {}
+    if tinyml_liveness_score is not None:
+        informational["tinyml_liveness_score"] = _round_score(_clamp_score(tinyml_liveness_score))
+
     return {
         "fraud_risk_score": fraud_risk_score,
         "liveness_index": _round_score(liveness_index),
@@ -142,4 +155,5 @@ def fuse_multi_modal_scores(
         "evaluated_modalities": sorted(evaluated.keys()),
         "unchecked_modalities": unchecked,
         "modalities": {key: evaluated.get(key) for key in MODALITY_WEIGHTS},
+        "informational": informational,
     }

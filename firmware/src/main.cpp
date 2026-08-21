@@ -12,6 +12,7 @@
 #include "api.h"
 #include "config.h"
 #include "microphone.h"
+#include "tinyml.h"
 #include "wifi_manager.h"
 
 static void blinkLed(int times, int onMs, int offMs) {
@@ -41,6 +42,7 @@ static void showVerdict(const char *riskLevel) {
 }
 
 static bool micReady = false;
+static bool tinyMLReady = false;
 
 void setup() {
   Serial.begin(115200);
@@ -85,6 +87,14 @@ void setup() {
   if (!micReady) {
     Serial.println("[boot] Microphone init failed — voice checks will be skipped");
   }
+
+  // TinyML is additive/best-effort: a failure here just means the loop skips
+  // the on-device inference step below and continues exactly as it did
+  // before this feature existed — never blocks the verified voice pipeline.
+  tinyMLReady = initTinyML();
+  if (!tinyMLReady) {
+    Serial.println("[boot] TinyML init failed — on-device inference will be skipped this boot");
+  }
 }
 
 void loop() {
@@ -113,6 +123,22 @@ void loop() {
   }
   Serial.printf("[loop] captured %u samples\n", (unsigned)sampleCount);
 
+  // Runs on the same captured buffer as postVoiceCheck() below, before it's
+  // freed — independent of the cloud heuristic, informational-only on the
+  // backend (see api.h/tinyml.h comments). A failure here (TinyML not ready,
+  // or this cycle's inference errors out) just means the risk-score call
+  // below omits tinyml_liveness_score entirely; it never blocks the verified
+  // voice-check/risk-score flow.
+  TinyMLResult tinyMLRes;
+  if (tinyMLReady) {
+    tinyMLRes = runTinyMLInference(samples, sampleCount, SAMPLE_RATE);
+    if (tinyMLRes.ok) {
+      Serial.printf("[loop] tinyml_liveness_score=%.2f (on-device, informational only)\n", tinyMLRes.livenessScore);
+    } else {
+      Serial.println("[loop] TinyML inference failed this cycle, continuing without it");
+    }
+  }
+
   VoiceCheckResult voiceRes = postVoiceCheck(samples, sampleCount, SAMPLE_RATE);
   free(samples);
 
@@ -124,7 +150,7 @@ void loop() {
   Serial.printf("[loop] voice_liveness_score=%.2f spoof_detected=%s\n",
                 voiceRes.voiceLivenessScore, voiceRes.spoofDetected ? "true" : "false");
 
-  RiskScoreResult riskRes = postRiskScore(voiceRes.voiceLivenessScore);
+  RiskScoreResult riskRes = postRiskScore(voiceRes.voiceLivenessScore, tinyMLRes.ok, tinyMLRes.livenessScore);
   if (!riskRes.ok) {
     Serial.println("[loop] /risk-score failed, skipping verdict display");
     delay(LOOP_INTERVAL_MS);

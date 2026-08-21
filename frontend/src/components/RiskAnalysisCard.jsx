@@ -195,6 +195,26 @@ const RiskAnalysisCard = ({
         </div>
       )}
 
+      {/*
+        Only appears once real ESP32-S3 firmware sends tinyml_liveness_score
+        with a /risk-score call (see firmware/src/tinyml_model.cpp) — this
+        browser-based demo flow has no TinyML runtime of its own and will
+        never produce this field itself. That's expected, not a bug: it's a
+        read-only display for a device-originated, informational-only score
+        (excluded from fraud_risk_score/risk_level — see utils/scoring.py),
+        not something to "fix" by wiring it into the fuse payload above.
+      */}
+      {result?.informational?.tinyml_liveness_score !== undefined && (
+        <div className="mt-3 rounded-xl bg-slate-950/70 p-3 text-xs font-mono text-slate-300 border border-slate-800">
+          <div className="text-slate-400 uppercase text-[10px] tracking-wider mb-1">
+            On-Device TinyML (informational, synthetic proof-of-concept)
+          </div>
+          <div>
+            Device Liveness Estimate: <span className="text-fuchsia-300">{formatModalityScore(result.informational.tinyml_liveness_score)}</span>
+          </div>
+        </div>
+      )}
+
       {error && (
         <p className="mt-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
           {error}

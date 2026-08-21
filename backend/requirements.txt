@@ -2,7 +2,8 @@ fastapi
 uvicorn
 python-multipart
 deepface
-opencv-python
+opencv-python<5  # pin below the 5.x line — 5.0.0 dropped cv2.CascadeClassifier, breaking face-presence gating
 tf-keras
 soundfile
 lameenc  # temporary debug-only MP3 export in routes/voice.py — see comment there
+httpx  # required by starlette.testclient.TestClient, used in test_api.py

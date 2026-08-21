@@ -26,6 +26,10 @@ class MultiModalRiskRequest(BaseModel):
     face_liveness_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     face_id_match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     doc_authenticity_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # ESP32-S3 on-device TinyML inference (synthetic-data proof-of-concept —
+    # see ml/README.md). Informational only: excluded from fusion in
+    # utils/scoring.py, never affects fraud_risk_score/risk_level.
+    tinyml_liveness_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 @router.post("/risk-score")
@@ -37,6 +41,7 @@ def risk_score(payload: MultiModalRiskRequest):
             face_liveness_score=payload.face_liveness_score,
             face_id_match_score=payload.face_id_match_score,
             doc_authenticity_score=payload.doc_authenticity_score,
+            tinyml_liveness_score=payload.tinyml_liveness_score,
         )
         log_session(fusion_result)
         return {

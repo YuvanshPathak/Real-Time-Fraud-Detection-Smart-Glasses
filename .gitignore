@@ -56,3 +56,10 @@ backend/.deepface/
 *.safetensors
 
 archive/*
+
+# ─── ml/ training pipeline ───────────────────────────────────────────────────
+# Generated/regeneratable — see ml/README.md. The exported C headers under
+# firmware/include/ (voice_tinyml_model.h, tinyml_feature_config.h) ARE
+# committed, since the firmware build can't generate them itself.
+ml/data/
+ml/output/

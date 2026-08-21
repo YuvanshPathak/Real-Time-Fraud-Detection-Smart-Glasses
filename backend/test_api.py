@@ -27,6 +27,20 @@ def test_all_routes():
     assert res_risk.status_code == 200
     assert res_risk.json()["risk_level"] == "SAFE"
 
+    print("\n--- 2b. tinyml_liveness_score must be informational-only ---")
+    # Regression check for the TinyML integration: adding an on-device score
+    # (even a low, "spoofy" one) must NOT change fraud_risk_score/risk_level —
+    # see the "informational" key in utils/scoring.py. If this ever fails,
+    # something has wired tinyml_liveness_score into the weighted fusion.
+    payload_with_tinyml = {**payload, "tinyml_liveness_score": 0.05}
+    res_risk_tinyml = client.post("/risk-score", json=payload_with_tinyml)
+    print("POST /risk-score (+tinyml) ->", res_risk_tinyml.status_code, res_risk_tinyml.json())
+    assert res_risk_tinyml.status_code == 200
+    body, body_tinyml = res_risk.json(), res_risk_tinyml.json()
+    assert body_tinyml["fraud_risk_score"] == body["fraud_risk_score"]
+    assert body_tinyml["risk_level"] == body["risk_level"]
+    assert body_tinyml["informational"]["tinyml_liveness_score"] == 0.05
+
     print("\n--- 3. Testing Face Anti-Spoofing & Liveness Endpoint ---")
     dummy_img = np.zeros((300, 300, 3), dtype=np.uint8)
     cv2.circle(dummy_img, (150, 150), 50, (255, 255, 255), -1)

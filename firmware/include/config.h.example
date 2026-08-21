@@ -1,0 +1,30 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// Copy this file to config.h and fill in real values. config.h is gitignored
+// (see firmware/.gitignore) — never commit real Wi-Fi credentials or a
+// backend URL. Re-check BACKEND_URL each session: it drifts with DHCP.
+
+#define WIFI_SSID "your-wifi-ssid"
+#define WIFI_PASSWORD "your-wifi-password"
+
+// Backend must be reachable from the board's Wi-Fi network — bind uvicorn to
+// 0.0.0.0, not 127.0.0.1, and use the host machine's real LAN IP here, not
+// "localhost". See CLAUDE.md "Working in this repo" for the firewall rule
+// needed on a "Public" network profile.
+#define BACKEND_URL "http://192.168.1.100:8000"
+
+#define SAMPLE_RATE 16000
+#define RECORD_SECONDS 5
+
+// XIAO ESP32-S3 Sense onboard PDM microphone pins.
+#define MIC_CLK_PIN 42
+#define MIC_DATA_PIN 41
+
+// Onboard LED used to display the SAFE/SUSPICIOUS/FRAUD verdict pattern.
+#define ALERT_LED_PIN LED_BUILTIN
+
+// Delay between capture/analyze/verdict cycles in the main loop.
+#define LOOP_INTERVAL_MS 3000
+
+#endif

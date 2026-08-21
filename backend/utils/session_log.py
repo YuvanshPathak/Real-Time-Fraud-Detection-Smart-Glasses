@@ -65,7 +65,15 @@ def log_session(fusion_result: dict) -> None:
                     int(bool(fusion_result.get("escalated"))),
                     json.dumps(fusion_result.get("evaluated_modalities", [])),
                     json.dumps(fusion_result.get("unchecked_modalities", [])),
-                    json.dumps(fusion_result.get("modalities", {})),
+                    # Informational-only scores (e.g. the ESP32-S3's TinyML
+                    # inference — see utils/scoring.py) ride along in this
+                    # same blob rather than getting their own column, since
+                    # they're just along for the ride for display/logging and
+                    # never affect fraud_risk_score/risk_level.
+                    json.dumps({
+                        **fusion_result.get("modalities", {}),
+                        **fusion_result.get("informational", {}),
+                    }),
                 ),
             )
     except Exception as exc:

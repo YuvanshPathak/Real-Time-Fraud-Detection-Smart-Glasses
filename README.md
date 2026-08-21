@@ -80,7 +80,7 @@ No hardware or gateway exists yet. The browser tab acts as both the Edge capture
 │  Capture        │               │  Extraction     │           │  (today: browser tab bypasses this hop        │
 │  [partial —     │               │  on-device      │           │   entirely, calling Cloud directly)          │
 │   mic only]     │               │  feature vectors│           │  [not built]                                 │
-│                 │               │  [not built]    │           │                                              │
+│                 │               │  [partial — POC]│           │                                              │
 └─────────────────┘               └─────────────────┘           └──────────────────┬───────────────────────────┘
                                                                                    │  HTTP
                                                                                    ▼
@@ -108,8 +108,8 @@ No hardware or gateway exists yet. The browser tab acts as both the Edge capture
 | Status | Meaning |
 |---|---|
 | ✅ Built & tested | Cloud Verification Engine (`/face-check`, `/voice-check`, `/document-check`, `/face-to-id-sync`, `/risk-score`) · Frontend Risk Card |
-| 🟡 Partially built | ESP32-S3 mic driver (rest of firmware unwritten) · Analytics (live cards only, nothing persisted) |
-| ⬜ Not yet built | TinyML on-device feature extraction · Phone Gateway relay · Bone Conduction Alert feedback |
+| 🟡 Partially built | ESP32-S3 mic driver (rest of firmware unwritten) · Analytics (live cards only, nothing persisted) · **TinyML on-device extraction (`ml/`, `firmware/src/tinyml_*.cpp`) — full feature-extraction/quantization/inference pipeline works, but trained only on a fabricated synthetic dataset (see `ml/README.md`), not real audio; wired through the backend as informational-only and not yet retrained on real hardware-captured samples** |
+| ⬜ Not yet built | Phone Gateway relay · Bone Conduction Alert feedback |
 
 ---
 
@@ -122,6 +122,7 @@ Honest gaps identified against the current code, not the proposal — worth read
 - **Missing modalities default to fully trusted.** `/risk-score` defaults any omitted score field to `1.0` rather than "unknown." A single obvious spoof detected in isolation (e.g. a phone-only cloned-voice call, with face/document unchecked) is diluted from what should be FRAUD down to SUSPICIOUS.
 - **No confidence margin at the thresholds.** `0.249` and `0.251` produce entirely different verdicts (SAFE vs. SUSPICIOUS) with no borderline/manual-review tier.
 - **`/face-check` has no face-detection gate.** It runs its liveness heuristics on whatever image content it receives, even if no face is present in the frame.
+- **TinyML on-device voice model is trained on fabricated data, not real speech.** `ml/generate_synthetic_dataset.py` programmatically synthesizes both the "genuine" and "spoof" training classes (see `ml/README.md`) — there was no real labeled genuine/spoof dataset available to train on (ASVspoof, the mentor-endorsed target, needs registration/licensing; real hardware-captured samples need physical board access neither of which happened this phase). The resulting `tinyml_liveness_score` proves the on-device pipeline (feature extraction → INT8 TFLite Micro inference) works, not that it detects real spoofing — it's wired through as informational-only for exactly this reason and does not affect `fraud_risk_score`/`risk_level`.
 
 ## 📁 Repository Structure
 
@@ -143,8 +144,13 @@ Real-Time-Fraud-Detection-Smart-Glasses/
 │   └── uploads/                    # Ephemeral only — files deleted after each request
 │
 ├── firmware/                       # ESP32-S3 firmware — PlatformIO project, rebuilt from scratch 2026-08-21
-│   ├── src/, include/, lib/        # PlatformIO project layout
+│   ├── src/, include/, lib/        # PlatformIO project layout — includes tinyml_model.cpp/tinyml_features.cpp
 │   └── platformio.ini              # Voice module only for this phase — see CLAUDE.md for current status
+│
+├── ml/                              # TinyML training pipeline — see ml/README.md
+│   ├── features.py                 # Log-mel feature extraction (source of truth, mirrored in firmware C++)
+│   ├── generate_synthetic_dataset.py, train.py  # Synthetic-POC dataset + model training/quantization
+│   └── export_*.py                 # Exports trained model / feature config into firmware/include/*.h
 │
 ├── frontend/                       # React Dashboard (Vite + Tailwind CSS) — built & tested
 │   ├── src/                        # React components & pages

@@ -115,7 +115,7 @@ VoiceCheckResult postVoiceCheck(const int16_t *samples, size_t sampleCount, int 
   return result;
 }
 
-RiskScoreResult postRiskScore(float voiceLivenessScore) {
+RiskScoreResult postRiskScore(float voiceLivenessScore, bool hasTinymlScore, float tinymlLivenessScore) {
   RiskScoreResult result;
   static String riskLevelBuf; // kept alive after return, per api.h contract
 
@@ -130,6 +130,12 @@ RiskScoreResult postRiskScore(float voiceLivenessScore) {
   // intentionally omitted, not set to 0 or 1.0 — the backend's fusion logic
   // excludes unevaluated modalities from the weighted average rather than
   // assuming a value for them.
+  if (hasTinymlScore) {
+    // Informational only on the backend (see utils/scoring.py) — omitted
+    // entirely (not sent as 0) when TinyML didn't produce a usable score
+    // this cycle, same "omitted means unevaluated" contract as the others.
+    reqDoc["tinyml_liveness_score"] = tinymlLivenessScore;
+  }
   String reqBody;
   serializeJson(reqDoc, reqBody);
 

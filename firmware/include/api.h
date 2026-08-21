@@ -26,6 +26,13 @@ VoiceCheckResult postVoiceCheck(const int16_t *samples, size_t sampleCount, int 
 // entirely (not sent as 0 or 1.0), matching the backend's fusion contract:
 // an omitted modality is excluded from the weighted average, not assumed
 // genuine or fraudulent.
-RiskScoreResult postRiskScore(float voiceLivenessScore);
+//
+// hasTinymlScore/tinymlLivenessScore are the on-device TinyML result
+// (tinyml.h) — sent as tinyml_liveness_score only when hasTinymlScore is
+// true. The backend treats this as informational-only (see
+// backend/utils/scoring.py): it never affects fraud_risk_score/risk_level,
+// so this call's meaning to the fused verdict is unchanged whether or not
+// TinyML ran successfully this cycle.
+RiskScoreResult postRiskScore(float voiceLivenessScore, bool hasTinymlScore = false, float tinymlLivenessScore = 0.0f);
 
 #endif
