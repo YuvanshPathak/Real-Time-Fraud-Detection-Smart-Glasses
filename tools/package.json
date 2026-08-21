@@ -1,0 +1,8 @@
+{
+  "name": "capstone-report-tools",
+  "private": true,
+  "description": "Generates the mid-sem evaluation report (.docx) from tools/generate_report.js.",
+  "dependencies": {
+    "docx": "^9.7.1"
+  }
+}

@@ -142,15 +142,9 @@ Real-Time-Fraud-Detection-Smart-Glasses/
 │   ├── requirements.txt
 │   └── uploads/                    # Ephemeral only — files deleted after each request
 │
-├── firmware/                       # ESP32-S3 Arduino Firmware — mostly unwritten
-│   └── smartglasses/
-│       ├── smart_glasses.ino       # Main Arduino sketch — EMPTY, not yet written
-│       ├── microphone.cpp / .h     # PDM microphone recording (16 kHz, 5 s) — implemented
-│       ├── config.h                # Pin assignments & sampling constants — implemented
-│       ├── camera.cpp / .h         # OV2640 camera capture — EMPTY (stub only)
-│       ├── wifi.cpp / .h           # Wi-Fi connection & HTTP client — EMPTY (stub only)
-│       ├── api.cpp / .h            # Backend API request helpers — EMPTY (stub only)
-│       └── storage.cpp             # Local file / buffer management — EMPTY (stub only)
+├── firmware/                       # ESP32-S3 firmware — PlatformIO project, rebuilt from scratch 2026-08-21
+│   ├── src/, include/, lib/        # PlatformIO project layout
+│   └── platformio.ini              # Voice module only for this phase — see CLAUDE.md for current status
 │
 ├── frontend/                       # React Dashboard (Vite + Tailwind CSS) — built & tested
 │   ├── src/                        # React components & pages
@@ -158,7 +152,10 @@ Real-Time-Fraud-Detection-Smart-Glasses/
 │
 ├── hardware/                       # Reserved for physical build docs / CAD — currently empty
 │
-├── Capstone Report (Idea Defence) Final.pdf   # Original project proposal
+├── tools/                          # Report & UML diagram generator scripts (own package.json)
+│   └── diagrams/                   # Generated PNGs embedded in the report
+│
+├── archive/                        # Superseded drafts & reference docs (idea-defence PDF, format template)
 │
 └── README.md                       # ← You are here
 ```
@@ -175,7 +172,7 @@ Real-Time-Fraud-Detection-Smart-Glasses/
 |---|---|
 | Python | ≥ 3.10 |
 | Node.js | ≥ 18 |
-| Arduino IDE / arduino-cli | ≥ 2.x _(firmware only, not yet usable — see below)_ |
+| PlatformIO (CLI or VS Code extension) | latest _(firmware only)_ |
 
 ---
 
@@ -225,11 +222,18 @@ Dashboard available at **`http://127.0.0.1:5173`**
 
 ---
 
-### 3 — Firmware (ESP32-S3 Smart Glasses) ⬜ _Not yet runnable_
+### 3 — Firmware (ESP32-S3 Smart Glasses) ✅ _Voice module verified on hardware_
 
-> **Status:** Only the PDM microphone driver (`microphone.cpp/.h`) and pin/sampling constants (`config.h`) are implemented. The main sketch (`smart_glasses.ino`) is empty, and `camera.cpp`, `wifi.cpp`, `api.cpp`, and `storage.cpp` are all empty stub files. There is nothing to compile or upload yet — this section is a placeholder for when that firmware is written.
+> **Status:** Rebuilt from scratch as a PlatformIO project 2026-08-21 (previous Arduino-IDE-based attempt intentionally deleted to start clean). The voice-anti-spoofing pipeline — on-device capture, Wi-Fi upload, cloud analysis, fused verdict, LED display — is built and confirmed working end-to-end on real ESP32-S3 hardware, cross-verified against the backend's own request log. Success is Wi-Fi-signal-dependent (a weak/marginal link fails uploads in varying ways; a strong hotspot works reliably) — see `CLAUDE.md`'s "Current build status" for the full detail and caveats, since that file is kept more current than this one during active firmware work. Camera, face/document capture on-device, on-device feature extraction, and the phone Gateway relay are out of scope for this phase — voice only.
 
-Once the sketch and stubs are filled in: open `firmware/smartglasses/smart_glasses.ino` in Arduino IDE 2, install the **esp32** board package, set Wi-Fi credentials and the backend URL, select the ESP32-S3 board/port, and upload. `config.h` currently defines `MIC_DATA_PIN` (GPIO 41), `MIC_CLK_PIN` (GPIO 42), a 16 kHz sample rate, and a 5-second recording window.
+```bash
+cd firmware
+cp include/config.h.example include/config.h   # fill in real Wi-Fi + backend URL, never commit this file
+pio run                                          # compile
+pio run -t upload -t monitor --upload-port COMx  # flash and watch serial output in one step
+```
+
+Uses the `pioarduino` fork of `platform-espressif32` (see `platformio.ini`), not the official PlatformIO registry — the official one is stuck on an ESP-IDF version too old for the PDM microphone driver.
 
 ---
 
@@ -243,6 +247,7 @@ Once the sketch and stubs are filled in: open `firmware/smartglasses/smart_glass
 | `POST` | `/voice-check` | Voice liveness / spoof detection |
 | `POST` | `/document-check` | ID document authenticity (ELA) |
 | `POST` | `/risk-score` | Multi-modal fraud risk fusion |
+| `GET` | `/sessions` | Recent fused-verdict history (metadata only, no biometric data) |
 
 ### Example — `/risk-score`
 

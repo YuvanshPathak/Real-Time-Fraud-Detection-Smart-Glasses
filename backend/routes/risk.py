@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 # Local application imports
 from utils.scoring import fuse_multi_modal_scores
+from utils.session_log import log_session, recent_sessions
 
 # Create a router for risk-related endpoints
 router = APIRouter()
@@ -37,6 +38,7 @@ def risk_score(payload: MultiModalRiskRequest):
             face_id_match_score=payload.face_id_match_score,
             doc_authenticity_score=payload.doc_authenticity_score,
         )
+        log_session(fusion_result)
         return {
             "module": "decision_fusion_engine",
             "status": "success",
@@ -44,3 +46,13 @@ def risk_score(payload: MultiModalRiskRequest):
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/sessions")
+def list_sessions(limit: int = 50):
+    """Return the most recent fused-verdict sessions, newest first.
+
+    Metadata only (scores, risk level, which modalities were evaluated) —
+    never raw audio/image/document data. See utils/session_log.py.
+    """
+    return {"module": "session_log", "status": "success", "sessions": recent_sessions(limit)}

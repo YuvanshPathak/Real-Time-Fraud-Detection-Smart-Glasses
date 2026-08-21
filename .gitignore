@@ -13,11 +13,28 @@ env/
 backend/uploads/*
 !backend/uploads/.gitkeep
 
+# Temporary debug-only voice recordings (routes/voice.py) — never commit
+# captured audio. Remove this along with the debug code once mic capture
+# is confirmed reliable — see CLAUDE.md's fresh-analysis rule.
+backend/debug_recordings/
+
+# Session log DB (verdict metadata only, no biometric data — utils/session_log.py)
+backend/session_log.db
+
 # OS / editor
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+
+# Microsoft Office lock files (created while a doc is open, not real content)
+~$*
+
+# Node dependencies (tools/ has its own package.json for report generation)
+node_modules/
+
+# PlatformIO build artifacts (firmware/ also has its own .gitignore for this)
+.pio/
 
 #global
 /*.txt
@@ -38,4 +55,4 @@ backend/.deepface/
 *.bin
 *.safetensors
 
-/CLAUDE.md
+archive/*

@@ -5,3 +5,4 @@ deepface
 opencv-python
 tf-keras
 soundfile
+lameenc  # temporary debug-only MP3 export in routes/voice.py — see comment there
